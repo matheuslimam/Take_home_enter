@@ -34,4 +34,4 @@ COPY worker/ /app/
 # (não coloque valores aqui; use fly secrets)
 
 # Comando — ajuste se seu worker tem CLI diferente
-CMD ["python", "-u", "worker.py"]
+CMD ["python", "-u", "main.py"]
