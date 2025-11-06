@@ -1,0 +1,6 @@
+node_modules
+.env
+*.log
+storage/docs/*
+storage/results/*
+venv
