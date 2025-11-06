@@ -15,6 +15,9 @@ LLM_MAX_OUTPUT_TOKENS = 80
 LLM_REASONING_EFFORT = "minimal"  # minimal|low|medium|high
 LLM_TEXT_VERBOSITY = "low"        # low|medium|high
 LLM_SANITIZE_EXISTING = True      # se True, sobrescreve com versão sanitizada mesmo quando já havia valor
+# LLM só em casos compostos ou quando há âncora do schema mas faltou texto
+LLM_ONLY_MISSING_OR_COMPOSED = True
+
 
 _openai_client_cached = None
 def _get_openai_client():
@@ -85,6 +88,15 @@ def page_text_from_words(words_xy, max_chars=2000):
     if len(text) > max_chars:
         text = text[:max_chars]
     return text
+
+def _schema_keys_null(schema: dict) -> dict:
+    """
+    Recebe um schema possivelmente com descrições (strings) nos valores
+    e retorna um novo dict apenas com as chaves e valores = None.
+    """
+    if not isinstance(schema, dict):
+        return {}
+    return {k: None for k in schema.keys()}
 
 # ---------------- LLM por campo (fallback) ----------------
 def llm_extract_value(key: str, context: str):
@@ -886,11 +898,16 @@ def process_page(doc, page, words, anchor_names):
         blockers = [bb for bb in all_label_bboxes if bb is not a["label_bbox"]]
 
         if seed_idx is None:
-            ctx = local_llm_context(words_xy, None, a["label_bbox"], a["gutter"], ay, local_YB)
-            llm_val = llm_extract_value(a["key"], ctx) if ctx else None
+            # Só usa LLM se a âncora veio do schema (não âncora genérica inferida)
+            llm_val = ""
+            if (not LLM_ONLY_MISSING_OR_COMPOSED) or str(a.get("origin","")).startswith("schema"):
+                ctx = local_llm_context(words_xy, None, a["label_bbox"], a["gutter"], ay, local_YB)
+                if ctx:
+                    llm_val = llm_extract_value(a["key"], ctx) or ""
             results.append({**a, "seed": None, "tokens": [], "bbox": None,
-                            "text": (llm_val or ""), "composed": False, "dir": None})
+                            "text": llm_val, "composed": False, "dir": None})
             continue
+
 
         tokens, bbox, text = reading_span_from_seed(
             words_xy, centers, seed_idx, a["anchor"], a["gutter"],
@@ -995,7 +1012,7 @@ def main():
         #missing_keys = anchor_names[:]  # passa o schema inteiro p/ re-sanitizar tudo
 
         if missing_keys:
-            missing_schema = {k: schema.get(k, None) for k in missing_keys}
+            missing_schema = _schema_keys_null({k: schema.get(k, None) for k in missing_keys})
             full_text = "\n\n".join(full_text_parts)
             json_filled = llm_extract_schema_json(full_text, missing_schema)
             # aplica somente se vier valor não-nulo
@@ -1087,7 +1104,7 @@ def process_pdf_to_json(pdf_bytes: bytes, schema: dict) -> dict:
 
     # Passo final: re-sanitizar tudo com JSON extractor no texto completo
     full_text = "\n\n".join(full_text_parts)
-    json_filled = llm_extract_schema_json(full_text, schema)
+    json_filled = llm_extract_schema_json(full_text, _schema_keys_null(schema))
 
     # aplica se vier valor não-nulo
     for k in anchor_names:

@@ -21,6 +21,9 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 def now_ms():
     return int(time.time() * 1000)
 
+
+
+
 def get_public_url(bucket: str, path: str) -> str:
     # buckets públicos: ok (para privados, use signed url)
     data = supabase.storage.from_(bucket).get_public_url(path)
@@ -66,6 +69,18 @@ def claim_item(item_id: str) -> bool:
         print("[worker] claim_item failed:", e)
         return False
 
+from urllib.parse import quote
+
+def get_public_url(bucket: str, path: str) -> str:
+    """
+    Buckets públicos: podemos construir a URL diretamente e evitar
+    variações do supabase-py (dict, objeto, string etc).
+    """
+    if not SUPABASE_URL:
+        raise RuntimeError("SUPABASE_URL ausente")
+    base = SUPABASE_URL.rstrip("/")
+    # Garante encoding seguro (mantém '/' do path)
+    return f"{base}/storage/v1/object/public/{bucket}/{quote(path, safe='/')}"
 
 
 def download_pdf(bucket: str, path: str) -> bytes:
@@ -75,29 +90,48 @@ def download_pdf(bucket: str, path: str) -> bytes:
     return r.content
 
 
+import io, os, json, tempfile
+
 def upload_json_result(job_id: str, file_name: str, payload: dict) -> str:
     """
-    Corrigido: usar BytesIO + file_options com chaves corretas.
+    Faz upload do JSON gerando um arquivo temporário (compatível com storage3 sync).
     """
-    # caminho padronizado
+    # caminho padronizado no bucket
     stem = file_name.rsplit(".", 1)[0]
     out_path = f"{job_id}/{stem}.json"
 
     data_bytes = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
-    bio = io.BytesIO(data_bytes)
 
-    # Observação: em supabase-py v2, as options usam KEBOB-CASE strings
-    res = supabase.storage.from_(BUCKET_RESULTS).upload(
-        path=out_path,
-        file=bio,
-        file_options={"content-type": "application/json", "cache-control": "3600", "upsert": "true"},
-    )
+    # Escreve em arquivo temporário e passa o PATH para o upload()
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile("wb", suffix=".json", delete=False) as tmp:
+            tmp.write(data_bytes)
+            tmp.flush()
+            tmp_path = tmp.name
 
-    # padroniza acesso a erro (varia por versão)
-    if isinstance(res, dict) and res.get("error"):
-        raise RuntimeError(res["error"]["message"])
+        res = supabase.storage.from_(BUCKET_RESULTS).upload(
+            path=out_path,
+            file=tmp_path,  # <- passa o caminho, não BytesIO
+            file_options={
+                # essas chaves funcionam no storage3 (headers são mapeados internamente)
+                "content-type": "application/json",
+                "cache-control": "3600",
+                "upsert": "true",
+            },
+        )
 
-    return out_path
+        # Trata possíveis formatos de retorno (string/dict/obj)
+        if isinstance(res, dict) and res.get("error"):
+            raise RuntimeError(res["error"]["message"])
+
+        return out_path
+    finally:
+        # limpa o arquivo temporário
+        if tmp_path and os.path.exists(tmp_path):
+            try: os.remove(tmp_path)
+            except Exception: pass
+
 
 def update_job_progress(job_id: str):
     ji = supabase.table("job_items").select("status").eq("job_id", job_id).execute().data or []
