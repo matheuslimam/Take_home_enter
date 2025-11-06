@@ -1,37 +1,29 @@
-# worker/Dockerfile
+# Dockerfile
 FROM python:3.11-slim
 
-# Otimizações básicas
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
-
-# Dependências de sistema para PyMuPDF (fitz), numpy etc.
+# Depêndencias básicas (certificados, locale, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libfreetype6-dev \
-    libjpeg62-turbo-dev \
-    libopenjp2-7 \
-    liblcms2-2 \
-    libwebp7 \
-    libharfbuzz0b \
-    libfribidi0 \
-    libxcb1 \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates locales tzdata curl \
+ && rm -rf /var/lib/apt/lists/*
 
+# Locale (opcional)
+RUN sed -i 's/# pt_BR.UTF-8 UTF-8/pt_BR.UTF-8 UTF-8/' /etc/locale.gen && locale-gen
+ENV LANG=pt_BR.UTF-8
+ENV LC_ALL=pt_BR.UTF-8
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8080
 
 WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Requisitos Python
-COPY worker/requirements.txt /app/requirements.txt
-RUN pip install -r /app/requirements.txt
+# Código
+COPY app.py ./app.py
+COPY worker ./worker
 
-# Código do worker
-COPY worker/ /app/
+# Se você lê .env localmente, copie .env.example -> e use Secrets no Fly para prod
+# COPY .env ./.env
 
-# Variáveis que você injeta na Fly (secrets)
-# OPENAI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, BUCKET_DOCS, BUCKET_RESULTS etc.
-# (não coloque valores aqui; use fly secrets)
-
-# Comando — ajuste se seu worker tem CLI diferente
-CMD ["python", "-u", "main.py"]
+EXPOSE 8080
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]

@@ -184,16 +184,23 @@ export default function App() {
   );
 
   // --- Edge invoker ---
-  async function triggerEdge(jobId: string) {
-    try {
-      const { error } = await supabase.functions.invoke('process-job', {
-        body: { job_id: jobId },
-      });
-      if (error) throw error;
-    } catch (e: any) {
-      console.warn('Falha ao chamar Edge:', e?.message || e);
+// App.tsx
+async function triggerFly(jobId: string) {
+  try {
+    const res = await fetch("https://<sua-app>.fly.dev/process-job", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_id: jobId }),
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`HTTP ${res.status} – ${txt}`);
     }
+  } catch (e: any) {
+    console.warn("Falha ao chamar Fly API:", e?.message || e);
   }
+}
+
 
   async function uploadAllToSupabase(jobId: string, map: FileWithSchema[]) {
     const uploaded: {
@@ -325,8 +332,8 @@ export default function App() {
 
       await supabase.from('jobs').update({ status: 'running' }).eq('id', j.id);
 
-      // primeira chamada da Edge para garantir T0 < 10s
-      await triggerEdge(j.id);
+      // primeira chamada da Fly para garantir T0 < 10s
+      await triggerFly(j.id);
 
       // polling inicial (lista)
       const { data: initialItems } = await supabase
@@ -353,7 +360,7 @@ export default function App() {
             .eq('job_id', j.id)
             .eq('status', 'queued')
             .limit(1);
-          if (q && q.length > 0) await triggerEdge(j.id);
+          if (q && q.length > 0) await triggerFly(j.id);
         }
       }, 4000);
 
