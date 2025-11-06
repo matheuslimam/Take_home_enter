@@ -1,0 +1,8 @@
+supabase
+psycopg2-binary
+requests
+pymupdf
+regex
+numpy
+python-dotenv
+openai
