@@ -1,17 +1,37 @@
+# worker/Dockerfile
 FROM python:3.11-slim
 
-# libs do PyMuPDF
+# Otimizações básicas
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Dependências de sistema para PyMuPDF (fitz), numpy etc.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libmujs0 libx11-6 libxext6 libxrender1 \
- && rm -rf /var/lib/apt/lists/*
+    build-essential \
+    libfreetype6-dev \
+    libjpeg62-turbo-dev \
+    libopenjp2-7 \
+    liblcms2-2 \
+    libtiff5 \
+    libwebp7 \
+    libharfbuzz0b \
+    libfribidi0 \
+    libxcb1 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY worker/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-COPY worker/anchors_reading_span.py ./anchors_reading_span.py
-COPY worker/main.py ./main.py
+# Requisitos Python
+COPY worker/requirements.txt /app/requirements.txt
+RUN pip install -r /app/requirements.txt
 
-ENV PYTHONUNBUFFERED=1
-EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host=0.0.0.0", "--port=8000"]
+# Código do worker
+COPY worker/ /app/
+
+# Variáveis que você injeta na Fly (secrets)
+# OPENAI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, BUCKET_DOCS, BUCKET_RESULTS etc.
+# (não coloque valores aqui; use fly secrets)
+
+# Comando — ajuste se seu worker tem CLI diferente
+CMD ["python", "-u", "worker.py"]
