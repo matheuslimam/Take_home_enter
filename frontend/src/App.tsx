@@ -261,7 +261,7 @@ export default function App() {
       const unsub = subscribeRealtime(j.id);
 
       const uploaded = await uploadAllToSupabase(j.id, mapping);
-      const labelByFile = await createJobItems(j.id, uploaded);
+      await createJobItems(j.id, uploaded);
 
       await supabase.from('jobs').update({ status: 'running' }).eq('id', j.id);
 
