@@ -12,14 +12,12 @@ origins = [
     "http://localhost:5173",
     "https://matheuslimam.github.io/Take_home_enter",        # GH Pages (ajuste!)
 ]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=False,            # deixe False se não usa cookies/autenticação por browser
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],                # ou liste explicitamente: ["content-type", "authorization", ...]
-    max_age=86400,
+    allow_origins=[o for o in origins if o],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 class JobBody(BaseModel):
