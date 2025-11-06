@@ -10,15 +10,16 @@ app = FastAPI()
 # CORS: ajuste conforme seus domínios
 origins = [
     "http://localhost:5173",
-    "https://<seu-usuario>.github.io",        # GH Pages (ajuste!)
-    "https://<seu-usuario>.github.io/<repo>", # se for /<repo>
+    "https://matheuslimam.github.io/Take_home_enter",        # GH Pages (ajuste!)
 ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o for o in origins if o],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,            # deixe False se não usa cookies/autenticação por browser
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],                # ou liste explicitamente: ["content-type", "authorization", ...]
+    max_age=86400,
 )
 
 class JobBody(BaseModel):
