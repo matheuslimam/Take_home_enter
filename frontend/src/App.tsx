@@ -187,7 +187,7 @@ export default function App() {
 // App.tsx
 async function triggerFly(jobId: string) {
   try {
-    const res = await fetch("https://<sua-app>.fly.dev/process-job", {
+    const res = await fetch("https://take-home-enter.fly.dev/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ job_id: jobId }),
