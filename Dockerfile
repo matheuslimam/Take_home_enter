@@ -13,12 +13,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg62-turbo-dev \
     libopenjp2-7 \
     liblcms2-2 \
-    libtiff5 \
     libwebp7 \
     libharfbuzz0b \
     libfribidi0 \
     libxcb1 \
     && rm -rf /var/lib/apt/lists/*
+
 
 WORKDIR /app
 
