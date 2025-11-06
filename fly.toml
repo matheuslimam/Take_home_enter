@@ -2,9 +2,6 @@
 app = "takehome-worker-SEU-SUFIXO"
 primary_region = "gru"
 
-[build]
-  dockerfile = "worker/Dockerfile"   # <- caminho do Dockerfile dentro do repo
-
 [env]
   UVICORN_WORKERS = "1"
 
