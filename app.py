@@ -9,7 +9,7 @@ app = FastAPI()
 # Origens permitidas (sem path)
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
-    "https://matheuslimam.github.io/Take_home_enter",  # GH Pages
+    "https://matheuslimam.github.io",  # GH Pages
 ]
 
 app.add_middleware(
