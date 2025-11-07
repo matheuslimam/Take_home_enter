@@ -61,121 +61,28 @@ A pipeline aplica **três estágios** com foco em custo/perf:
 
 ## 🏗️ Arquitetura
 <!-- Mapa mental da arquitetura: Lima's PDF Extractor -->
-
-<div style="display: flex; flex-direction: column; align-items: center; margin: 2rem 0;">
-    <style>
-        .mindmap-container {
-            background: #f8fafc;
-            border-radius: 16px;
-            box-shadow: 0 2px 12px #0002;
-            padding: 2.5rem 2rem;
-            max-width: 900px;
-            width: 100%;
-            position: relative;
-            font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
-        }
-        .mindmap-node {
-            display: flex;
-            align-items: center;
-            gap: 1.5rem;
-            margin-bottom: 2.5rem;
-            position: relative;
-        }
-        .mindmap-label {
-            background: #2563eb;
-            color: #fff;
-            padding: 0.7em 1.2em;
-            border-radius: 8px;
-            font-weight: bold;
-            min-width: 140px;
-            text-align: center;
-            box-shadow: 0 1px 6px #0001;
-            font-size: 1.1em;
-            position: relative;
-            z-index: 2;
-        }
-        .mindmap-label.supabase { background: #0ea5e9; }
-        .mindmap-label.fastapi { background: #22c55e; }
-        .mindmap-label.realtime { background: #f59e42; }
-        .mindmap-desc {
-            color: #334155;
-            font-size: 1em;
-            background: #fff;
-            border-radius: 6px;
-            padding: 0.7em 1em;
-            box-shadow: 0 1px 4px #0001;
-            flex: 1;
-            min-width: 220px;
-        }
-        .mindmap-arrow {
-            width: 60px;
-            height: 2px;
-            background: linear-gradient(90deg, #2563eb 60%, #fff 100%);
-            margin: 0 1em;
-            position: relative;
-        }
-        .mindmap-arrow.supabase { background: linear-gradient(90deg, #0ea5e9 60%, #fff 100%); }
-        .mindmap-arrow.fastapi { background: linear-gradient(90deg, #22c55e 60%, #fff 100%); }
-        .mindmap-arrow.realtime { background: linear-gradient(90deg, #f59e42 60%, #fff 100%); }
-        .mindmap-center {
-            background: #fff;
-            border: 2px solid #2563eb;
-            border-radius: 50%;
-            width: 80px;
-            height: 80px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            color: #2563eb;
-            font-size: 1.1em;
-            margin-bottom: 2.5rem;
-            box-shadow: 0 2px 8px #0001;
-        }
-        @media (max-width: 700px) {
-            .mindmap-container { padding: 1rem; }
-            .mindmap-node { flex-direction: column; gap: 0.7rem; margin-bottom: 2rem; }
-            .mindmap-arrow { display: none; }
-            .mindmap-label, .mindmap-desc { min-width: unset; width: 100%; }
-            .mindmap-center { width: 60px; height: 60px; font-size: 1em; }
-        }
-    </style>
-    <div class="mindmap-container">
-        <div class="mindmap-node">
-            <span class="mindmap-label">React UI<br><small>(GH Pages)</small></span>
-            <span class="mindmap-arrow"></span>
-            <span class="mindmap-desc">
-                Upload de PDFs + JSON<br>
-                <small>Schema único ou dataset</small>
-            </span>
-        </div>
-        <div class="mindmap-node">
-            <span class="mindmap-label supabase">Supabase<br><small>Storage + Postgres</small></span>
-            <span class="mindmap-arrow supabase"></span>
-            <span class="mindmap-desc">
-                Salva PDFs no bucket <b>docs</b>, cria <b>job</b> e <b>job_items</b> (controle e orquestração)<br>
-                <small>Realtime para progresso</small>
-            </span>
-        </div>
-        <div class="mindmap-node">
-            <span class="mindmap-label fastapi">FastAPI<br><small>(Fly.io)</small></span>
-            <span class="mindmap-arrow fastapi"></span>
-            <span class="mindmap-desc">
-                Endpoints <code>/healthz</code> e <code>/process-job</code><br>
-                Baixa PDF do bucket, processa (heurística + LLM), salva JSON no bucket <b>results</b>, atualiza <b>job_items</b>
-            </span>
-        </div>
-        <div class="mindmap-node">
-            <span class="mindmap-label realtime">UI Realtime</span>
-            <span class="mindmap-arrow realtime"></span>
-            <span class="mindmap-desc">
-                Assina progresso em tempo real<br>
-                Botão <b>Baixar combinado</b> (merge dos JSONs)
-            </span>
-        </div>
-    </div>
-</div>
-
+```
+[React UI (GH Pages)]
+   └── Upload PDFs + JSON (schema/dataset)
+       └── Supabase Storage (bucket: docs)
+           └── Cria job + job_items (Postgres) ──► Realtime
+                       │
+                       ▼
+                [FastAPI em Fly.io]
+                  /healthz, /process-job
+                       │
+             baixa PDF do bucket (docs)
+                       │
+             processa (heurística + LLM)
+                       │
+             sobe JSON no bucket (results)
+                       │
+           atualiza job_items (status, tempo)
+                       │
+                       ▼
+           UI assina Realtime e mostra progresso
+           + botão “Baixar combinado” (merge dos JSONs)
+```
 ---
 
 ## 🗃️ Modelo de dados (Supabase)
