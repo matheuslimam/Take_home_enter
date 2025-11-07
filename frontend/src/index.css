@@ -1,22 +1,38 @@
-/* src/index.css — Tailwind v3 */
+/* Tailwind base */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Componentes utilitários (evitando apply de utilidades “dinâmicas”) */
+/* Componentes escuros */
 @layer components {
-  /* use bg-opacity-80 em vez de bg-white/80 dentro do @apply no v3 */
-  .card { @apply bg-white bg-opacity-80 backdrop-blur rounded-2xl shadow-sm ring-1 ring-slate-200; }
-
-  .btn  { @apply inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition; }
-  .btn-primary { @apply btn bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-slate-300; }
-
-  .input { @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500; }
-  .textarea { @apply input min-h-[12rem] font-mono; }
-
-  .badge { @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium; }
-  .badge-ok   { @apply badge bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200; }
-  .badge-warn { @apply badge bg-amber-50  text-amber-700  ring-1 ring-amber-200; }
-  .badge-err  { @apply badge bg-rose-50   text-rose-700   ring-1 ring-rose-200; }
-  .badge-run  { @apply badge bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200; }
+  .card-dark {
+    @apply rounded-2xl bg-neutral-900/50 border border-neutral-800 shadow-lg;
+  }
+  .btn-primary {
+    @apply inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 rounded-xl bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-200 hover:bg-neutral-700;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 rounded-xl bg-transparent px-4 py-2 text-sm font-medium text-indigo-300 hover:bg-neutral-900/50;
+  }
+  .textarea-dark {
+    @apply w-full h-48 rounded-xl border border-neutral-800 bg-neutral-900/60 p-3 font-mono text-sm text-neutral-200 placeholder-neutral-500 outline-none focus:ring-2 focus:ring-indigo-600;
+  }
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-neutral-800 text-neutral-300;
+  }
+  .badge-ok {
+    @apply bg-emerald-500/20 text-emerald-300;
+  }
+  .badge-warn {
+    @apply bg-amber-500/20 text-amber-300;
+  }
+  .badge-run {
+    @apply bg-indigo-500/20 text-indigo-300;
+  }
+  .badge-err {
+    @apply bg-rose-500/20 text-rose-300;
+  }
 }

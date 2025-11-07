@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase, BUCKET_DOCS, BUCKET_RESULTS } from './lib/supabase';
 
+// ====== TIPOS ======
 type Job = {
   id: string;
   status: string;
@@ -37,8 +38,11 @@ type FileWithSchema = {
   matchedBy: 'filename' | 'order' | 'single';
 };
 
-const prettyMs = (ms?: number | null) =>
-  !ms && ms !== 0 ? '—' : `${(ms / 1000).toFixed(2)}s`;
+// ====== ENV ======
+const FLY_API_URL = import.meta.env.VITE_FLY_API_URL || 'https://take-home-enter.fly.dev';
+
+// ====== HELPERS ======
+const prettyMs = (ms?: number | null) => (!ms && ms !== 0 ? '—' : `${(ms / 1000).toFixed(2)}s`);
 
 function basename(p?: string) {
   if (!p) return '';
@@ -57,12 +61,7 @@ function parseInput(text: string): ParsedInput | null {
           extraction_schema: (x.extraction_schema ?? {}) as Record<string, any>,
           pdf_path: x.pdf_path ? String(x.pdf_path) : undefined,
         }))
-        .filter(
-          (x) =>
-            x.label &&
-            x.extraction_schema &&
-            typeof x.extraction_schema === 'object'
-        );
+        .filter((x) => x.label && x.extraction_schema && typeof x.extraction_schema === 'object');
       if (items.length > 0) return { mode: 'labeled', items };
       return null;
     }
@@ -75,18 +74,23 @@ function parseInput(text: string): ParsedInput | null {
   return null;
 }
 
+// ====== APP ======
 export default function App() {
   const [files, setFiles] = useState<File[]>([]);
-  const [schemaText, setSchemaText] = useState<string>(
-    '{\n  "nome": null\n}'
-  );
+  const [schemaText, setSchemaText] = useState<string>('{\n  "nome": null\n}');
   const [job, setJob] = useState<Job | null>(null);
   const [items, setItems] = useState<JobItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [mapping, setMapping] = useState<FileWithSchema[]>([]);
-  const spinnerRef = useRef<HTMLDivElement>(null);
+  const [combinedUrl, setCombinedUrl] = useState<string | null>(null);
 
-  // Spinner manual
+  const [serverStatus, setServerStatus] = useState<'idle' | 'connecting' | 'ok' | 'error'>('idle');
+  const [isDragging, setIsDragging] = useState(false);
+
+  const spinnerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ====== SPINNER ======
   useEffect(() => {
     let id: number | undefined;
     const el = spinnerRef.current;
@@ -98,12 +102,10 @@ export default function App() {
       id = requestAnimationFrame(tick);
     };
     if (isProcessing) id = requestAnimationFrame(tick);
-    return () => {
-      if (id !== undefined) cancelAnimationFrame(id);
-    };
+    return () => { if (id !== undefined) cancelAnimationFrame(id); };
   }, [isProcessing]);
 
-  // Mapeamento arquivo → schema/label (a cada mudança)
+  // ====== MAPA FILE→SCHEMA ======
   useEffect(() => {
     const parsed = parseInput(schemaText);
     if (!parsed) {
@@ -111,17 +113,11 @@ export default function App() {
       return;
     }
     if (parsed.mode === 'single') {
-      setMapping(
-        files.map((f) => ({
-          file: f,
-          schema: parsed.schema,
-          matchedBy: 'single',
-        }))
-      );
+      setMapping(files.map((f) => ({
+        file: f, schema: parsed.schema, matchedBy: 'single',
+      })));
       return;
     }
-
-    // labeled
     const labels = parsed.items;
     const byName = new Map<string, LabeledSchema>();
     labels.forEach((it) => {
@@ -136,257 +132,116 @@ export default function App() {
     files.forEach((f) => {
       const hit = byName.get(f.name.toLowerCase());
       if (hit) {
-        next.push({
-          file: f,
-          schema: hit.extraction_schema,
-          label: hit.label,
-          matchedBy: 'filename',
-        });
+        next.push({ file: f, schema: hit.extraction_schema, label: hit.label, matchedBy: 'filename' });
       } else {
         let idx: number | undefined = undefined;
-        for (const i of unused) {
-          idx = i;
-          break;
-        }
+        for (const i of unused) { idx = i; break; }
         if (idx !== undefined) {
           const it = leftovers[idx];
           unused.delete(idx);
-          next.push({
-            file: f,
-            schema: it.extraction_schema,
-            label: it.label,
-            matchedBy: 'order',
-          });
+          next.push({ file: f, schema: it.extraction_schema, label: it.label, matchedBy: 'order' });
         } else if (labels.length > 0) {
-          next.push({
-            file: f,
-            schema: labels[0].extraction_schema,
-            label: labels[0].label,
-            matchedBy: 'order',
-          });
+          next.push({ file: f, schema: labels[0].extraction_schema, label: labels[0].label, matchedBy: 'order' });
         } else {
-          next.push({
-            file: f,
-            schema: {},
-            matchedBy: 'order',
-          });
+          next.push({ file: f, schema: {}, matchedBy: 'order' });
         }
       }
     });
-
     setMapping(next);
   }, [files, schemaText]);
 
   const parsedOk = useMemo(() => !!parseInput(schemaText), [schemaText]);
-  const canStart = useMemo(
-    () => files.length > 0 && parsedOk,
-    [files, parsedOk]
-  );
+  const canStart = useMemo(() => files.length > 0 && parsedOk, [files, parsedOk]);
+  const percent = job && job.total_count ? Math.min(100, Math.round((job.done_count / job.total_count) * 100)) : 0;
 
-  // --- Edge invoker ---
-// App.tsx
-async function triggerFly(jobId: string) {
-  try {
-    const res = await fetch("https://take-home-enter.fly.dev/process-job", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ job_id: jobId }),
-    });
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(`HTTP ${res.status} – ${txt}`);
+  // ====== SERVER WARM / HEALTH ======
+  async function pingServer() {
+    try {
+      setServerStatus('connecting');
+      const resp = await fetch(`${FLY_API_URL}/healthz`, { method: 'GET', mode: 'cors' });
+      if (resp.ok) { setServerStatus('ok'); return true; }
+      setServerStatus('error');
+      return false;
+    } catch {
+      setServerStatus('error'); return false;
     }
-  } catch (e: any) {
-    console.warn("Falha ao chamar Fly API:", e?.message || e);
   }
-}
 
+  useEffect(() => {
+    // aquece na montagem
+    pingServer();
+  }, []);
 
+  useEffect(() => {
+    // aquece quando o usuário adiciona arquivos
+    if (files.length > 0) pingServer();
+  }, [files.length]);
+
+  // ====== EDGE SUPABASE (CASO QUEIRA LIGAR JUNTO) ======
+  async function triggerEdge(jobId: string) {
+    try {
+      // opcional: chamar suas Supabase Edge Functions aqui se desejar
+      // await supabase.functions.invoke('process-job', { body: { job_id: jobId } });
+    } catch (e: any) {
+      console.warn('Falha ao chamar Edge:', e?.message || e);
+    }
+  }
+
+  // ====== SUPABASE ======
   async function uploadAllToSupabase(jobId: string, map: FileWithSchema[]) {
-    const uploaded: {
-      file_name: string;
-      file_path: string;
-      label?: string;
-      schema: any;
-    }[] = [];
+    const uploaded: { file_name: string; file_path: string; label?: string; schema: any }[] = [];
     for (const m of map) {
       const f = m.file;
       const path = `${jobId}/${crypto.randomUUID()}-${f.name}`;
-      const { error } = await supabase.storage
-        .from(BUCKET_DOCS)
-        .upload(path, f, {
-          cacheControl: '3600',
-          upsert: false,
-          contentType: f.type || 'application/pdf',
-        });
-      if (error) throw new Error(`upload fail ${f.name}: ${error.message}`);
-      uploaded.push({
-        file_name: f.name,
-        file_path: path,
-        label: m.label,
-        schema: m.schema,
+      const { error } = await supabase.storage.from(BUCKET_DOCS).upload(path, f, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: f.type || 'application/pdf'
       });
+      if (error) throw new Error(`upload fail ${f.name}: ${error.message}`);
+      uploaded.push({ file_name: f.name, file_path: path, label: m.label, schema: m.schema });
     }
     return uploaded;
   }
 
   async function createJob(total: number) {
-    const { data, error } = await supabase
-      .from('jobs')
-      .insert([{ total_count: total }])
-      .select()
-      .single();
+    const { data, error } = await supabase.from('jobs').insert([{ total_count: total }]).select().single();
     if (error) throw error;
     return data as Job;
   }
 
-  async function createJobItems(
-    jobId: string,
-    uploaded: {
-      file_name: string;
-      file_path: string;
-      label?: string;
-      schema: any;
-    }[]
-  ) {
-    const rows = uploaded.map((u) => ({
-      job_id: jobId,
-      file_name: u.file_name,
-      file_path: u.file_path,
-      schema: u.schema,
+  async function createJobItems(jobId: string, uploaded: { file_name: string; file_path: string; label?: string; schema: any }[]) {
+    const rows = uploaded.map(u => ({
+      job_id: jobId, file_name: u.file_name, file_path: u.file_path, schema: u.schema
     }));
     const { error } = await supabase.from('job_items').insert(rows);
     if (error) throw error;
-    return new Map(uploaded.map((u) => [u.file_name, u.label]));
   }
 
   function subscribeRealtime(jobId: string) {
     const ch1 = supabase
       .channel(`jobs-${jobId}`)
-      .on(
-        'postgres_changes',
+      .on('postgres_changes',
         { event: '*', schema: 'public', table: 'jobs', filter: `id=eq.${jobId}` },
-        (payload) =>
-          setJob((prev) => ({
-            ...(prev || (payload.new as any)),
-            ...(payload.new as any),
-          }))
-      )
+        payload => setJob(prev => ({ ...(prev || (payload.new as any)), ...(payload.new as any) })))
       .subscribe();
 
     const ch2 = supabase
       .channel(`job_items-${jobId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'job_items',
-          filter: `job_id=eq.${jobId}`,
-        },
-        (payload) => {
-          setItems((prev) => {
-            const idx = prev.findIndex(
-              (x) => x.id === (payload.new as any).id
-            );
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'job_items', filter: `job_id=eq.${jobId}` },
+        payload => {
+          setItems(prev => {
+            const idx = prev.findIndex(x => x.id === (payload.new as any).id);
             if (idx >= 0) {
-              const clone = prev.slice();
-              clone[idx] = payload.new as any;
-              return clone;
+              const clone = prev.slice(); clone[idx] = payload.new as any; return clone;
             }
             return [...prev, payload.new as any];
           });
-        }
-      )
+        })
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(ch1);
-      supabase.removeChannel(ch2);
-    };
-  }
-
-  async function startProcessing() {
-    let unsub: (() => void) | null = null;
-    let endWatch: number | undefined;
-    let kicker: number | undefined;
-
-    try {
-      setIsProcessing(true);
-      setJob(null);
-      setItems([]);
-
-      const parsed = parseInput(schemaText);
-      if (!parsed) {
-        alert('JSON inválido.');
-        setIsProcessing(false);
-        return;
-      }
-
-      const j = await createJob(files.length);
-      setJob(j);
-      unsub = subscribeRealtime(j.id);
-
-      const uploaded = await uploadAllToSupabase(j.id, mapping);
-      await createJobItems(j.id, uploaded);
-
-      await supabase.from('jobs').update({ status: 'running' }).eq('id', j.id);
-
-      // primeira chamada da Fly para garantir T0 < 10s
-      await triggerFly(j.id);
-
-      // polling inicial (lista)
-      const { data: initialItems } = await supabase
-        .from('job_items')
-        .select('*')
-        .eq('job_id', j.id)
-        .order('created_at');
-      setItems(initialItems || []);
-
-      // auto-kicker: enquanto houver queued, chama a Edge a cada 4s
-      kicker = window.setInterval(async () => {
-        const { data, error } = await supabase
-          .from('job_items')
-          .select('id', { count: 'exact', head: true })
-          .eq('job_id', j.id)
-          .eq('status', 'queued');
-        if (error) return;
-        // Em head mode, supabase-js retorna data===null; use count pela resposta HTTP
-        // fallback: faz uma query normal se necessário
-        if (data === null) {
-          const { data: q } = await supabase
-            .from('job_items')
-            .select('id')
-            .eq('job_id', j.id)
-            .eq('status', 'queued')
-            .limit(1);
-          if (q && q.length > 0) await triggerFly(j.id);
-        }
-      }, 4000);
-
-      // monitorar término do job
-      endWatch = window.setInterval(async () => {
-        const { data } = await supabase
-          .from('jobs')
-          .select('*')
-          .eq('id', j.id)
-          .single();
-        if (!data) return;
-        if (data.status === 'done' || data.status === 'error') {
-          if (endWatch) clearInterval(endWatch);
-          if (kicker) clearInterval(kicker);
-          if (unsub) unsub();
-          setIsProcessing(false);
-        }
-      }, 1500);
-    } catch (e: any) {
-      console.error(e);
-      alert(e.message || 'Falha ao iniciar processamento');
-      setIsProcessing(false);
-      if (endWatch) clearInterval(endWatch);
-      if (kicker) clearInterval(kicker);
-      if (unsub) unsub?.();
-    }
+    return () => { supabase.removeChannel(ch1); supabase.removeChannel(ch2); };
   }
 
   function downloadUrlFor(path?: string | null) {
@@ -395,104 +250,269 @@ async function triggerFly(jobId: string) {
     const url =
       typeof res === 'string'
         ? res
-        : (res as any)?.data?.publicUrl || (res as any)?.publicUrl || null;
+        : (res?.data?.publicUrl || (res as any)?.publicUrl || null);
     return url;
   }
 
-  const percent =
-    job && job.total_count
-      ? Math.min(100, Math.round((job.done_count / job.total_count) * 100))
-      : 0;
+  // ====== COMBINAR JSONS QUANDO TERMINAR ======
+  async function buildCombinedJsonIfDone(curJobId: string) {
+    try {
+      if (!items || items.length === 0) return;
 
+      const allDone = items.every(it => it.status === 'done' && it.result_path);
+      if (!allDone) return;
+
+      const urls = items.map(it => downloadUrlFor(it.result_path!)).filter(Boolean) as string[];
+      if (urls.length === 0) return;
+
+      const fetched = await Promise.all(
+        urls.map(async (u) => {
+          try { const r = await fetch(u); return await r.json(); } catch { return null; }
+        })
+      );
+
+      const merged = fetched
+        .map((j, idx) => ({ file: items[idx].file_name, result: j }))
+        .filter(x => x.result !== null);
+
+      const blob = new Blob([JSON.stringify(merged, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      setCombinedUrl(url);
+    } catch (e) {
+      console.warn('Falha ao montar JSON combinado:', e);
+    }
+  }
+
+  useEffect(() => {
+    if (job?.status === 'done') {
+      buildCombinedJsonIfDone(job.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job?.status, items.length]);
+
+  // ====== START ======
+  async function startProcessing() {
+    try {
+      setIsProcessing(true);
+      setJob(null);
+      setItems([]);
+      setCombinedUrl(null);
+
+      // acorda o servidor antes de começar
+      await pingServer();
+
+      const parsed = parseInput(schemaText);
+      if (!parsed) { alert('JSON inválido.'); setIsProcessing(false); return; }
+
+      const j = await createJob(files.length);
+      setJob(j);
+      const unsub = subscribeRealtime(j.id);
+
+      const uploaded = await uploadAllToSupabase(j.id, mapping);
+      await createJobItems(j.id, uploaded);
+
+      // dispara seu worker no Fly (chamada simples POST /process-job)
+      try {
+        await fetch(`${FLY_API_URL}/process-job`, {
+          method: 'POST',
+          mode: 'cors',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ job_id: j.id })
+        });
+      } catch (e) {
+        console.warn('Falha ao chamar Fly API:', (e as any)?.message || e);
+      }
+
+      // opcional: Supabase Edge também
+      await triggerEdge(j.id);
+
+      await supabase.from('jobs').update({ status: 'running' }).eq('id', j.id);
+
+      const { data: initialItems } = await supabase.from('job_items').select('*').eq('job_id', j.id).order('created_at');
+      setItems(initialItems || []);
+
+      const endWatch = setInterval(async () => {
+        const { data } = await supabase.from('jobs').select('*').eq('id', j.id).single();
+        if (!data) return;
+        if (data.status === 'done' || data.status === 'error') {
+          clearInterval(endWatch);
+          unsub();
+          setIsProcessing(false);
+        }
+      }, 1500);
+
+    } catch (e: any) {
+      console.error(e);
+      alert(e.message || 'Falha ao iniciar processamento');
+      setIsProcessing(false);
+    }
+  }
+
+  // ====== DRAG & DROP ======
+  function onDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsDragging(false);
+    const f = Array.from(e.dataTransfer.files || []).filter((x) => x.type === 'application/pdf');
+    if (f.length) setFiles(prev => [...prev, ...f]);
+  }
+  function onDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault(); setIsDragging(true);
+  }
+  function onDragLeave() { setIsDragging(false); }
+
+  // ====== UI HELPERS ======
   const mappingIssues = useMemo(() => {
     const parsed = parseInput(schemaText);
     if (!parsed || parsed.mode === 'single') return [];
     const issues: string[] = [];
-    const byName = new Set(
-      parsed.items
-        .map((i) => basename(i.pdf_path || '').toLowerCase())
-        .filter(Boolean)
-    );
-    const fileNames = new Set(files.map((f) => f.name.toLowerCase()));
-    for (const n of byName)
-      if (n && !fileNames.has(n))
-        issues.push(
-          `Item do dataset (${n}) não tem arquivo correspondente (por nome). Atribuído por ordem.`
-        );
-    for (const f of files)
-      if (!byName.has(f.name.toLowerCase()))
-        issues.push(
-          `Arquivo ${f.name} não encontrado no dataset por nome. Atribuído por ordem.`
-        );
+    const byName = new Set(parsed.items.map(i => basename(i.pdf_path || '').toLowerCase()).filter(Boolean));
+    const fileNames = new Set(files.map(f => f.name.toLowerCase()));
+    for (const n of byName) if (n && !fileNames.has(n)) issues.push(`Dataset (${n}) sem arquivo correspondente (por nome). Atribuído por ordem.`);
+    for (const f of files) if (!byName.has(f.name.toLowerCase())) issues.push(`Arquivo ${f.name} não encontrado no dataset por nome. Atribuído por ordem.`);
     return issues;
   }, [files, schemaText]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 text-slate-800">
-      <header className="mx-auto max-w-6xl px-6 pt-8 pb-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
-              Extractor UI — Take-home
-            </h1>
-            <p className="text-sm text-slate-600">
-              Upload → Processar → Progresso em tempo real → JSON final
-            </p>
-          </div>
-          <div className="relative">
-            <div
-              ref={spinnerRef}
-              className="w-10 h-10 rounded-full border-4 border-indigo-600 border-t-transparent"
-            />
+    <div className="min-h-screen bg-neutral-950 text-neutral-200">
+      <header className="mx-auto max-w-6xl px-4 pt-5 pb-2">
+        <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-1">
+              <img src="public/limas.png" alt="Logo" className="h-32 w-auto inline-block align-middle" />
+              <div>
+                <h1
+                  className="font-bold tracking-tight relative overflow-hidden"
+                  style={{
+                    fontSize: '50px', // ajuste aqui o tamanho em px
+                    lineHeight: '1.1',
+                    background: 'linear-gradient(90deg, #ffae35 20%, #fff7e0 50%, #ffae35 80%)',
+                    backgroundSize: '200% 100%',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    animation: 'shimmer 2s infinite linear',
+                  }}
+                >
+                  Lima's PDF Extractor
+                </h1>
+              <style>
+              {`
+              @keyframes shimmer {
+                0% { background-position: -100% 0; }
+                100% { background-position: 100% 0; }
+              }
+              `}
+              </style>
+              <p className="text-base text-neutral-400 mt-1 animate-typing overflow-hidden whitespace-nowrap border-r-2 border-neutral-400 pr-2">
+                Faça o upload dos seus PDFs para extrair informações relevantes.
+              </p>
+              <style>
+              {`
+              @keyframes typing {
+                from { width: 0 }
+                to { width: 100% }
+              }
+              .animate-typing {
+                width: 0;
+                animation: typing 2.5s steps(50, end) forwards;
+              }
+              `}
+              </style>
+              </div>
+            </div>
+
+          <div className="flex items-center gap-3">
+            <button className="btn-secondary" onClick={pingServer} title="Acordar servidor (healthcheck)">
+              Wake server
+            </button>
+            <div className="flex items-center gap-2">
+              <span className={`size-3 rounded-full ${
+                serverStatus === 'ok' ? 'bg-emerald-400 animate-pulse'
+                : serverStatus === 'connecting' ? 'bg-amber-400 animate-pulse'
+                : serverStatus === 'error' ? 'bg-rose-500'
+                : 'bg-neutral-600'
+              }`} />
+                <span
+                className={`text-xs px-2 py-1 rounded-full font-medium transition-all ${
+                  serverStatus === 'ok'
+                  ? 'bg-emerald-900 text-emerald-300 border border-emerald-400 shadow'
+                  : serverStatus === 'connecting'
+                  ? 'bg-amber-900 text-amber-300 border border-amber-400 shadow'
+                  : serverStatus === 'error'
+                  ? 'bg-rose-900 text-rose-300 border border-rose-400 shadow'
+                  : 'bg-neutral-800 text-neutral-400 border border-neutral-600'
+                }`}
+                >
+                {serverStatus === 'ok'
+                  ? 'Conectado'
+                  : serverStatus === 'connecting'
+                  ? 'Conectando…'
+                  : serverStatus === 'error'
+                  ? 'Erro'
+                  : 'Idle'}
+                </span>
+            </div>
+            <div ref={spinnerRef} className="w-8 h-8 rounded-full border-4 border-indigo-500/80 border-t-transparent" />
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl px-6 pb-10 grid lg:grid-cols-2 gap-6">
         {/* LEFT */}
-        <section className="card p-6">
-          <h2 className="font-semibold mb-3">1) Documentos (PDF)</h2>
-          <label className="block">
+        <section className="card-dark p-6">
+          <h2 className="font-semibold mb-3">Documentos (PDF)</h2>
+
+          {/* Drag and drop */}
+          <div
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            className={`rounded-2xl border-2 border-dashed px-4 py-10 text-center transition ${
+              isDragging ? 'border-indigo-400 bg-indigo-400/10' : 'border-neutral-700 bg-neutral-900/40'
+            }`}
+          >
+            <p className="text-neutral-300 mb-2">Arraste seus PDFs aqui</p>
+            <p className="text-xs text-neutral-500 mb-4">ou</p>
+            <button className="btn-secondary" onClick={() => fileInputRef.current?.click()}>
+              Selecionar arquivos
+            </button>
             <input
+              ref={fileInputRef}
               type="file"
               multiple
               accept="application/pdf"
-              onChange={(e) => setFiles(Array.from(e.target.files || []))}
-              className="block w-full text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-indigo-700 hover:file:bg-indigo-100"
+              onChange={e => setFiles(prev => [...prev, ...Array.from(e.target.files || [])])}
+              className="hidden"
             />
-          </label>
+          </div>
 
           {files.length > 0 && (
-            <ul className="mt-3 text-sm space-y-1">
-              {files.map((f) => (
+            <ul className="mt-4 text-sm space-y-1">
+              {files.map(f => (
                 <li key={f.name} className="flex items-center justify-between">
                   <span className="truncate">{f.name}</span>
-                  <span className="text-slate-400">
-                    {(f.size / 1024).toFixed(1)} KB
-                  </span>
+                  <span className="text-neutral-500">{(f.size / 1024).toFixed(1)} KB</span>
                 </li>
               ))}
             </ul>
           )}
 
-          <h2 className="font-semibold mt-6 mb-2">2) Schema / Dataset JSON</h2>
-          <p className="text-xs text-slate-500 mb-2">
-            Aceita <b>objeto</b> (schema único) ou <b>array</b> no formato do
-            dataset ({'{ label, extraction_schema, pdf_path? }'}).
+          <h2 className="font-semibold mt-6 mb-2">Schema / Dataset JSON</h2>
+          <p className="text-xs text-neutral-400 mb-2">
+            Aceita <b>objeto</b> (schema único) ou <b>array</b> ({'{ label, extraction_schema, pdf_path? }'}).
           </p>
           <textarea
-            className="textarea"
+            className="textarea-dark"
             value={schemaText}
-            onChange={(e) => setSchemaText(e.target.value)}
+            onChange={e => setSchemaText(e.target.value)}
             placeholder='Ex.: { "nome": null }  ou  [ { "label":"cnh", "extraction_schema":{...}, "pdf_path":"cnh_1.pdf" } ]'
           />
 
+          {/* Preview do mapeamento */}
           {mapping.length > 0 && (
             <div className="mt-4">
               <h3 className="font-medium mb-2">Preview do mapeamento</h3>
-              <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <div className="rounded-xl border border-neutral-800 overflow-hidden">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-50">
+                  <thead className="bg-neutral-900/70">
                     <tr>
                       <th className="text-left p-2">Arquivo</th>
                       <th className="text-left p-2">Label</th>
@@ -501,160 +521,95 @@ async function triggerFly(jobId: string) {
                     </tr>
                   </thead>
                   <tbody>
-                    {mapping.map((m) => (
-                      <tr key={m.file.name} className="border-t">
+                    {mapping.map(m => (
+                      <tr key={m.file.name} className="border-t border-neutral-800">
                         <td className="p-2">{m.file.name}</td>
                         <td className="p-2">
-                          {m.label ? (
-                            <span className="badge badge-ok">{m.label}</span>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
+                          {m.label ? <span className="badge badge-ok">{m.label}</span> : <span className="text-neutral-500">—</span>}
                         </td>
-                        <td className="p-2 text-slate-600">
-                          {Object.keys(m.schema || {}).join(', ') || '—'}
-                        </td>
+                        <td className="p-2 text-neutral-300">{Object.keys(m.schema || {}).join(', ') || '—'}</td>
                         <td className="p-2">
-                          {m.matchedBy === 'filename' && (
-                            <span className="badge badge-ok">filename</span>
-                          )}
-                          {m.matchedBy === 'order' && (
-                            <span className="badge badge-warn">ordem</span>
-                          )}
-                          {m.matchedBy === 'single' && (
-                            <span className="badge badge-run">schema único</span>
-                          )}
+                          {m.matchedBy === 'filename' && <span className="badge badge-ok">filename</span>}
+                          {m.matchedBy === 'order' && <span className="badge badge-warn">ordem</span>}
+                          {m.matchedBy === 'single' && <span className="badge badge-run">schema único</span>}
                         </td>
                       </tr>
                     ))}
                     {mapping.length === 0 && (
-                      <tr>
-                        <td className="p-2 text-slate-400" colSpan={4}>
-                          —
-                        </td>
-                      </tr>
+                      <tr><td className="p-2 text-neutral-500" colSpan={4}>—</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
 
               {mappingIssues.length > 0 && (
-                <ul className="mt-3 space-y-1 text-xs text-amber-700">
-                  {mappingIssues.map((msg, i) => (
-                    <li key={i} className="badge badge-warn">
-                      {msg}
-                    </li>
-                  ))}
+                <ul className="mt-3 space-y-1 text-xs text-amber-400">
+                  {mappingIssues.map((msg, i) => <li key={i} className="badge badge-warn">{msg}</li>)}
                 </ul>
               )}
             </div>
           )}
         </section>
+        
 
         {/* RIGHT */}
-        <section className="card p-6">
-          <h2 className="font-semibold mb-3">3) Processamento</h2>
+        <section className="card-dark p-6">
+          <h2 className="font-semibold mb-3">Processamento</h2>
           <div className="flex items-center gap-3">
-            <button
-              className="btn-primary"
-              disabled={!canStart || isProcessing}
-              onClick={startProcessing}
-            >
+            <button className="btn-primary" disabled={!canStart || isProcessing} onClick={startProcessing}>
               {isProcessing ? 'Processando…' : 'Processar'}
             </button>
-            <span className="text-sm text-slate-600">
-              Job: {job?.id || '—'}
-            </span>
+            <span className="text-sm text-neutral-400">Job: {job?.id || '—'}</span>
+            {combinedUrl && (
+              <a className="btn-ghost" href={combinedUrl} download={`job-${job?.id}-combined.json`}>
+                Baixar combinado
+              </a>
+            )}
           </div>
 
           <div className="mt-6">
             <div className="flex items-center justify-between text-sm">
-              <div>
-                Status: <b>{job?.status || 'aguardando'}</b>
-              </div>
-              <div className="text-slate-500">
-                {job?.done_count ?? 0}/{job?.total_count ?? 0}
-              </div>
+              <div>Status: <b className="text-neutral-100">{job?.status || 'aguardando'}</b></div>
+              <div className="text-neutral-500">{job?.done_count ?? 0}/{job?.total_count ?? 0}</div>
             </div>
-            <div className="w-full h-3 bg-slate-100 rounded-xl mt-2 overflow-hidden">
-              <div
-                className="h-3 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 transition-all"
-                style={{ width: `${percent}%` }}
-              />
+            <div className="w-full h-3 bg-neutral-900 rounded-xl mt-2 overflow-hidden">
+              <div className="h-3 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 transition-all" style={{ width: `${percent}%` }} />
             </div>
           </div>
 
           <h3 className="font-semibold mt-6">Itens</h3>
-          <div className="mt-2 max-h-80 overflow-auto rounded-xl ring-1 ring-slate-200">
+          <div className="mt-2 max-h-80 overflow-auto rounded-xl ring-1 ring-neutral-800">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50">
+              <thead className="bg-neutral-900/70">
                 <tr>
                   <th className="text-left p-2">Arquivo</th>
-                  <th className="text-left p-2">Label</th>
                   <th className="text-left p-2">Status</th>
                   <th className="text-left p-2">Tempo</th>
                   <th className="text-left p-2">Resultado</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((it) => {
-                  const mapRow = mapping.find(
-                    (m) => m.file.name === it.file_name
-                  );
-                  const label = mapRow?.label;
-                  return (
-                    <tr key={it.id} className="border-t">
-                      <td className="p-2">{it.file_name}</td>
-                      <td className="p-2">
-                        {label ? (
-                          <span className="badge badge-ok">{label}</span>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
-                      <td className="p-2">
-                        {it.status === 'done' && (
-                          <span className="badge badge-ok">done</span>
-                        )}
-                        {it.status === 'running' && (
-                          <span className="badge badge-run">running</span>
-                        )}
-                        {it.status === 'queued' && (
-                          <span className="badge">queued</span>
-                        )}
-                        {it.status === 'error' && (
-                          <span
-                            className="badge badge-err"
-                            title={it.error_message || ''}
-                          >
-                            error
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-2">{prettyMs(it.duration_ms)}</td>
-                      <td className="p-2">
-                        {it.result_path ? (
-                          <a
-                            className="text-indigo-600 underline"
-                            href={downloadUrlFor(it.result_path)!}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            JSON
-                          </a>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {items.length === 0 && (
-                  <tr>
-                    <td className="p-2 text-slate-400" colSpan={5}>
-                      Nenhum item ainda…
+                {items.map(it => (
+                  <tr key={it.id} className="border-t border-neutral-800">
+                    <td className="p-2">{it.file_name}</td>
+                    <td className="p-2">
+                      {it.status === 'done' && <span className="badge badge-ok">done</span>}
+                      {it.status === 'running' && <span className="badge badge-run">running</span>}
+                      {it.status === 'queued' && <span className="badge">queued</span>}
+                      {it.status === 'error' && <span className="badge badge-err" title={it.error_message || ''}>error</span>}
+                    </td>
+                    <td className="p-2">{prettyMs(it.duration_ms)}</td>
+                    <td className="p-2">
+                      {it.result_path ? (
+                        <a className="text-indigo-400 underline" href={downloadUrlFor(it.result_path)!} target="_blank" rel="noreferrer">
+                          JSON
+                        </a>
+                      ) : '—'}
                     </td>
                   </tr>
+                ))}
+                {items.length === 0 && (
+                  <tr><td className="p-2 text-neutral-500" colSpan={4}>Nenhum item ainda…</td></tr>
                 )}
               </tbody>
             </table>
@@ -662,8 +617,8 @@ async function triggerFly(jobId: string) {
         </section>
       </main>
 
-      <footer className="mx-auto max-w-6xl px-6 pb-10 text-xs text-slate-500">
-        Feito para o take-home — Supabase (Storage/DB/Realtime) + Edge Function + GitHub Pages
+      <footer className="mx-auto max-w-6xl px-6 pb-10 text-xs text-neutral-500">
+        Todos os direitos reservados. Desenvolvido por Matheus Lima.
       </footer>
     </div>
   );
