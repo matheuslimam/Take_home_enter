@@ -8,8 +8,17 @@
 
 # Lima's PDF Extractor — Enter AI Fellowship Take‑Home
 
-
-> **Stack**: React + Vite (GitHub Pages) • FastAPI (Fly.io) • Supabase (Postgres, Storage, Realtime) • PyMuPDF • OpenAI `gpt-5-mini` (fallback opcional)
+<p align="center">
+    <b>Stack principal:</b><br>
+    <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" />
+    <img src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=FFD62E" />
+    <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" />
+    <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" />
+    <img src="https://img.shields.io/badge/PyMuPDF-3776AB?style=for-the-badge&logo=python&logoColor=white" />
+    <img src="https://img.shields.io/badge/OpenAI-412991?style=for-the-badge&logo=openai&logoColor=white" />
+    <img src="https://img.shields.io/badge/GitHub%20Pages-222?style=for-the-badge&logo=github&logoColor=white" />
+    <img src="https://img.shields.io/badge/Fly.io-000?style=for-the-badge" />
+</p>
 
 
 
@@ -30,10 +39,10 @@ A pipeline aplica **três estágios** com foco em custo/perf:
 1. **Âncoras + leitura local (heurístico)** — `anchors_reading_span.py`
 
    * O algoritmo gera variações do rótulo do campo (normalização, abreviações, *prefix cuts*, sem vogais) para encontrar **âncoras** no layout do documento.
-   * Utiliza "vetores" de texto para comparar âncoras e campos, permitindo busca semântica e maior flexibilidade na identificação, mesmo com pequenas diferenças ou erros de digitação.
+   * Utiliza "vetores" de texto para comparar proximidade cosseno entre **âncoras** e **campos** (Palavras próximas, compostas ou simples), permitindo busca semântica e maior flexibilidade na identificação, mesmo com pequenas diferenças ou erros de digitação. Essa etapa ocorre em milesimos de segundos e tem uma acuracia média de 80% dos casos testados.
    * A partir da âncora localizada, extrai um **span de leitura** (direita/abaixo), respeitando limites de largura/altura, saltos de linha e tolerância vertical.
-   * **Fast‑paths** sem LLM: utiliza regex para identificar padrões comuns como telefone, números de inscrição, CPF e datas.
-* Resultado: valor bruto por campo, com limpeza (`sanitize_value_text`).
+   * **Fast‑paths** sem LLM: utiliza regex para identificar padrões comuns como telefone, números de inscrição, CPF e datas. Mas evitando uso de dicionários especificos para deixar completament genérico.
+* Resultado: valor bruto por campo, com limpeza (`sanitize_value_text`). Segue uma imagem de um exemplo que rodei somente nessa etapa:
 
     <p align="center">
         <img src="frontend/public/rg_1_page1_span.png" alt="Exemplo de detecção de âncora e extração de span" width="600" />
@@ -157,7 +166,19 @@ fly deploy
 
 ## 🖥️ Frontend (React + Vite + Tailwind)
 
+<p align="center">
+    <img src="frontend/public/tela.png" alt="Interface do frontend" width="700" />
+    <br />
+    <em>Exemplo da interface: upload em lote, mapeamento de schema, progresso e download.</em>
+</p>
+
 **Principais recursos**
+
+> ⚠️ **Aviso:** Existem **3 formas de aquecer o servidor** antes de processar os PDFs, pode demorar um pouco (média de 8s) para iniciar a queue:
+> 1. Clicar no botão **Wake server** na interface (recomendada).
+> 2. Quando colocamos um documento.
+> 3. Realizar qualquer requisição para o backend (ex.: iniciar um job).
+> Isso garante que o backend esteja ativo e pronto para receber os arquivos.
 
 * **Upload em lote** (drag & drop).
 * Campo JSON aceita:
@@ -192,12 +213,13 @@ Deploy no GitHub Pages:
 
 ## ⚙️ Como usar (end‑to‑end)
 
-### Como usar (end‑to‑end)
+### Usando a UI
 
 1. Acesse: [https://matheuslimam.github.io/Take_home_enter](https://matheuslimam.github.io/Take_home_enter)
 2. Na interface, **cole um JSON** de schema (único ou dataset) e **arraste os PDFs** desejados.
 3. Clique em **Processar**: a UI cria o `job` e os `job_items`, faz upload dos PDFs para o bucket `docs/` e aciona o backend via `/process-job`.
 4. Acompanhe o **progresso em tempo real**; ao finalizar, utilize o botão **Baixar combinado** para obter um arquivo `job-<id>-combined.json` com `{ file, result }` para cada PDF processado.
+
 
 ### Exemplos de schema (dataset)
 
@@ -259,6 +281,7 @@ Deploy no GitHub Pages:
 
 ## 🧪 Testes locais com o dataset público
 
+Se a UI, não funcionar de alguma forma, apresentar lentidão ou está sem internet.
 * Baixe o repositório com PDFs de exemplo do desafio.
 * Monte um **dataset JSON** (array) apontando `pdf_path` para cada arquivo do diretório local e teste com `anchors_reading_span.py` (modo CLI) ou pela UI.
 
@@ -274,17 +297,17 @@ python worker/anchors_reading_span.py  # lê dataset3.json/Data/pdfs e imprime J
 
 ```
 .
-├─ frontend/                 # React + Vite + Tailwind (UI GH Pages)
-│  ├─ src/App.tsx            # UI (upload, mapping, progresso, média, download)
-│  └─ src/lib/supabase.ts    # cliente supabase (anon)
+├─ frontend/                   # React + Vite + Tailwind (UI GH Pages)
+│  ├─ src/App.tsx              # UI (upload, mapping, progresso, média, download)
+│  └─ src/lib/supabase.ts      # cliente supabase (anon)
 ├─ worker/
-│  ├─ anchors_reading_span.py# heurísticas + LLM fallback + extractor JSON
-│  ├─ run_job.py             # execução sequencial por job_item
-│  └─ main.py                # FastAPI async (secret + concurrency)
-├─ app.py                    # FastAPI simples (sem segredo, síncrono)
-├─ requirements.txt          # deps Python
-├─ fly.toml                  # config Fly
-└─ README.md                 # este arquivo
+│  ├─ anchors_reading_span.py  # heurísticas + LLM fallback + extractor JSON
+│  ├─ run_job.py               # execução sequencial por job_item
+│  └─ main.py                  # FastAPI async (secret + concurrency)
+├─ app.py                      # FastAPI simples (sem segredo, síncrono)
+├─ requirements.txt            # deps Python
+├─ fly.toml                    # config Fly
+└─ README.md                   # este arquivo
 ```
 
 ---
@@ -300,6 +323,8 @@ python worker/anchors_reading_span.py  # lê dataset3.json/Data/pdfs e imprime J
 ---
 
 ## 🛠️ Troubleshooting
+
+
 
 
 ---
