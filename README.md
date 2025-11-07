@@ -60,29 +60,13 @@ A pipeline aplica **três estágios** com foco em custo/perf:
 ---
 
 ## 🏗️ Arquitetura
+<div align="center">
+
 <!-- Mapa mental da arquitetura: Lima's PDF Extractor -->
-```
-[React UI (GH Pages)]
-   └── Upload PDFs + JSON (schema/dataset)
-       └── Supabase Storage (bucket: docs)
-           └── Cria job + job_items (Postgres) ──► Realtime
-                       │
-                       ▼
-                [FastAPI em Fly.io]
-                  /healthz, /process-job
-                       │
-             baixa PDF do bucket (docs)
-                       │
-             processa (heurística + LLM)
-                       │
-             sobe JSON no bucket (results)
-                       │
-           atualiza job_items (status, tempo)
-                       │
-                       ▼
-           UI assina Realtime e mostra progresso
-           + botão “Baixar combinado” (merge dos JSONs)
-```
+<img src="frontend/public/tree.png" alt="Mapa mental da arquitetura" width="800" />
+
+</div>
+
 ---
 
 ## 🗃️ Modelo de dados (Supabase)
