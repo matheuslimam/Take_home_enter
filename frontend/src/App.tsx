@@ -377,7 +377,7 @@ export default function App() {
       <header className="mx-auto max-w-6xl px-4 pt-5 pb-2">
         <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-1">
-              <img src="/limas.png" alt="Logo" className="h-32 w-auto inline-block align-middle" />
+              <img src="/frontend/public/limas.png" alt="Logo" className="h-32 w-auto inline-block align-middle" />
               <div>
                 <h1
                   className="font-bold tracking-tight relative overflow-hidden"
