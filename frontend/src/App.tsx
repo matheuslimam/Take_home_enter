@@ -178,7 +178,7 @@ export default function App() {
   }, [files.length]);
 
   // ====== EDGE SUPABASE (CASO QUEIRA LIGAR JUNTO) ======
-  async function triggerEdge(jobId: string) {
+  async function triggerEdge(_jobId: string) {
     try {
       // opcional: chamar suas Supabase Edge Functions aqui se desejar
       // await supabase.functions.invoke('process-job', { body: { job_id: jobId } });
@@ -255,7 +255,7 @@ export default function App() {
   }
 
   // ====== COMBINAR JSONS QUANDO TERMINAR ======
-  async function buildCombinedJsonIfDone(curJobId: string) {
+  async function buildCombinedJsonIfDone(_curJobId: string) {
     try {
       if (!items || items.length === 0) return;
 
