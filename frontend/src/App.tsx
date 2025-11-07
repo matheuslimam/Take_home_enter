@@ -376,25 +376,29 @@ export default function App() {
     <div className="min-h-screen bg-neutral-950 text-neutral-200">
       <header className="mx-auto max-w-6xl px-4 pt-5 pb-2">
         <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-1">
-              <img src="/frontend/public/limas.png" alt="Logo" className="h-32 w-auto inline-block align-middle" />
-              <div>
-                <h1
-                  className="font-bold tracking-tight relative overflow-hidden"
-                  style={{
-                    fontSize: '50px', // ajuste aqui o tamanho em px
-                    lineHeight: '1.1',
-                    background: 'linear-gradient(90deg, #ffae35 20%, #fff7e0 50%, #ffae35 80%)',
-                    backgroundSize: '200% 100%',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    animation: 'shimmer 2s infinite linear',
-                  }}
-                >
-                  Lima's PDF Extractor
-                </h1>
+          <div className="flex items-center gap-1">
+            <img
+              src={`${import.meta.env.BASE_URL}limas.png`}
+              alt="Logo"
+              className="h-32 w-auto inline-block align-middle"
+            />
+            <div>
+              <h1
+                className="font-bold tracking-tight relative overflow-hidden"
+                style={{
+                  fontSize: '50px', // ajuste aqui o tamanho em px
+                  lineHeight: '1.1',
+                  background: 'linear-gradient(90deg, #ffae35 20%, #fff7e0 50%, #ffae35 80%)',
+                  backgroundSize: '200% 100%',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  animation: 'shimmer 2s infinite linear',
+                }}
+              >
+                Lima's PDF Extractor
+              </h1>
               <style>
-              {`
+                {`
               @keyframes shimmer {
                 0% { background-position: -100% 0; }
                 100% { background-position: 100% 0; }
@@ -405,7 +409,7 @@ export default function App() {
                 Faça o upload dos seus PDFs para extrair informações relevantes.
               </p>
               <style>
-              {`
+                {`
               @keyframes typing {
                 from { width: 0 }
                 to { width: 100% }
@@ -416,39 +420,37 @@ export default function App() {
               }
               `}
               </style>
-              </div>
             </div>
+          </div>
 
           <div className="flex items-center gap-3">
             <button className="btn-secondary" onClick={pingServer} title="Acordar servidor (healthcheck)">
               Wake server
             </button>
             <div className="flex items-center gap-2">
-              <span className={`size-3 rounded-full ${
-                serverStatus === 'ok' ? 'bg-emerald-400 animate-pulse'
-                : serverStatus === 'connecting' ? 'bg-amber-400 animate-pulse'
-                : serverStatus === 'error' ? 'bg-rose-500'
-                : 'bg-neutral-600'
-              }`} />
-                <span
-                className={`text-xs px-2 py-1 rounded-full font-medium transition-all ${
-                  serverStatus === 'ok'
-                  ? 'bg-emerald-900 text-emerald-300 border border-emerald-400 shadow'
-                  : serverStatus === 'connecting'
-                  ? 'bg-amber-900 text-amber-300 border border-amber-400 shadow'
-                  : serverStatus === 'error'
-                  ? 'bg-rose-900 text-rose-300 border border-rose-400 shadow'
-                  : 'bg-neutral-800 text-neutral-400 border border-neutral-600'
-                }`}
-                >
+              <span className={`size-3 rounded-full ${serverStatus === 'ok' ? 'bg-emerald-400 animate-pulse'
+                  : serverStatus === 'connecting' ? 'bg-amber-400 animate-pulse'
+                    : serverStatus === 'error' ? 'bg-rose-500'
+                      : 'bg-neutral-600'
+                }`} />
+              <span
+                className={`text-xs px-2 py-1 rounded-full font-medium transition-all ${serverStatus === 'ok'
+                    ? 'bg-emerald-900 text-emerald-300 border border-emerald-400 shadow'
+                    : serverStatus === 'connecting'
+                      ? 'bg-amber-900 text-amber-300 border border-amber-400 shadow'
+                      : serverStatus === 'error'
+                        ? 'bg-rose-900 text-rose-300 border border-rose-400 shadow'
+                        : 'bg-neutral-800 text-neutral-400 border border-neutral-600'
+                  }`}
+              >
                 {serverStatus === 'ok'
                   ? 'Conectado'
                   : serverStatus === 'connecting'
-                  ? 'Conectando…'
-                  : serverStatus === 'error'
-                  ? 'Erro'
-                  : 'Idle'}
-                </span>
+                    ? 'Conectando…'
+                    : serverStatus === 'error'
+                      ? 'Erro'
+                      : 'Idle'}
+              </span>
             </div>
             <div ref={spinnerRef} className="w-8 h-8 rounded-full border-4 border-indigo-500/80 border-t-transparent" />
           </div>
@@ -465,9 +467,8 @@ export default function App() {
             onDrop={onDrop}
             onDragOver={onDragOver}
             onDragLeave={onDragLeave}
-            className={`rounded-2xl border-2 border-dashed px-4 py-10 text-center transition ${
-              isDragging ? 'border-indigo-400 bg-indigo-400/10' : 'border-neutral-700 bg-neutral-900/40'
-            }`}
+            className={`rounded-2xl border-2 border-dashed px-4 py-10 text-center transition ${isDragging ? 'border-indigo-400 bg-indigo-400/10' : 'border-neutral-700 bg-neutral-900/40'
+              }`}
           >
             <p className="text-neutral-300 mb-2">Arraste seus PDFs aqui</p>
             <p className="text-xs text-neutral-500 mb-4">ou</p>
@@ -550,7 +551,7 @@ export default function App() {
             </div>
           )}
         </section>
-        
+
 
         {/* RIGHT */}
         <section className="card-dark p-6">
