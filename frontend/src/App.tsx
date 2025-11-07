@@ -372,6 +372,18 @@ export default function App() {
     return issues;
   }, [files, schemaText]);
 
+  // média apenas dos itens concluídos que têm duration_ms
+  const avgDoneMs = useMemo(() => {
+    const vals = items
+      .filter(it => it.status === 'done' && typeof it.duration_ms === 'number')
+      .map(it => it.duration_ms as number);
+
+    if (vals.length === 0) return null;
+    const sum = vals.reduce((a, b) => a + b, 0);
+    return Math.round(sum / vals.length); // em ms
+  }, [items]);
+
+
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-200">
       <header className="mx-auto max-w-6xl px-4 pt-5 pb-2">
@@ -429,18 +441,18 @@ export default function App() {
             </button>
             <div className="flex items-center gap-2">
               <span className={`size-3 rounded-full ${serverStatus === 'ok' ? 'bg-emerald-400 animate-pulse'
-                  : serverStatus === 'connecting' ? 'bg-amber-400 animate-pulse'
-                    : serverStatus === 'error' ? 'bg-rose-500'
-                      : 'bg-neutral-600'
+                : serverStatus === 'connecting' ? 'bg-amber-400 animate-pulse'
+                  : serverStatus === 'error' ? 'bg-rose-500'
+                    : 'bg-neutral-600'
                 }`} />
               <span
                 className={`text-xs px-2 py-1 rounded-full font-medium transition-all ${serverStatus === 'ok'
-                    ? 'bg-emerald-900 text-emerald-300 border border-emerald-400 shadow'
-                    : serverStatus === 'connecting'
-                      ? 'bg-amber-900 text-amber-300 border border-amber-400 shadow'
-                      : serverStatus === 'error'
-                        ? 'bg-rose-900 text-rose-300 border border-rose-400 shadow'
-                        : 'bg-neutral-800 text-neutral-400 border border-neutral-600'
+                  ? 'bg-emerald-900 text-emerald-300 border border-emerald-400 shadow'
+                  : serverStatus === 'connecting'
+                    ? 'bg-amber-900 text-amber-300 border border-amber-400 shadow'
+                    : serverStatus === 'error'
+                      ? 'bg-rose-900 text-rose-300 border border-rose-400 shadow'
+                      : 'bg-neutral-800 text-neutral-400 border border-neutral-600'
                   }`}
               >
                 {serverStatus === 'ok'
@@ -574,8 +586,15 @@ export default function App() {
               <div className="text-neutral-500">{job?.done_count ?? 0}/{job?.total_count ?? 0}</div>
             </div>
             <div className="w-full h-3 bg-neutral-900 rounded-xl mt-2 overflow-hidden">
+
               <div className="h-3 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 transition-all" style={{ width: `${percent}%` }} />
             </div>
+            {avgDoneMs !== null && job?.status === 'done' && (
+              <div className="mt-3 text-sm text-neutral-300">
+                Média por PDF: <b className="text-neutral-100">{prettyMs(avgDoneMs)}</b>
+              </div>
+            )}
+
           </div>
 
           <h3 className="font-semibold mt-6">Itens</h3>
